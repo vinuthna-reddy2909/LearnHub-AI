@@ -1,108 +1,86 @@
-# 🚀 LearnHub AI — Deployment Guide
+# LearnHub AI deployment
 
----
+The backend uses Java 21, Spring Boot, and PostgreSQL. Render can create the
+backend and a managed PostgreSQL database from the root `render.yaml`.
+The frontend is a Vite app deployed separately to Vercel.
 
-## 🗄️ STEP 1 — Set Up MongoDB Atlas (Free Cloud Database)
+## Push the project to GitHub
 
-> **Why Atlas?** Render does not include a built-in database. MongoDB Atlas is the standard free-tier cloud database for MERN apps.
+The repository remote is already configured as
+`https://github.com/vinuthna-reddy2909/LearnHub-AI.git`.
 
-1. Go to [https://www.mongodb.com/atlas](https://www.mongodb.com/atlas) → Sign up free
-2. Create a new **Project** → Create a **Free Cluster (M0)**
-3. Under **Security → Database Access**: Create a DB user (save username + password)
-4. Under **Security → Network Access**: Click **"Allow Access from Anywhere"** (`0.0.0.0/0`) for Render compatibility
-5. Click **Connect → Drivers** → Copy the connection string. It looks like:
-   ```
-   mongodb+srv://username:password@cluster0.xxxxx.mongodb.net/?retryWrites=true&w=majority
-   ```
-6. Add your database name: change `/?retryWrites` → `/learnhubai?retryWrites`
+Before pushing, review `git status` and make sure no `.env` files, passwords,
+API keys, or local build output are staged. Push the reviewed changes to the
+branch you intend to deploy.
 
----
+## Deploy the backend and database on Render
 
-## ⚙️ STEP 2 — Deploy Backend on Render (Node.js — No Docker needed!)
+1. In Render, create a new Blueprint and connect the GitHub repository.
+2. Render reads the root `render.yaml`, creates a PostgreSQL database and
+   deploys the Java backend. The backend is built from `backend-java/Dockerfile`.
+3. Provide `GEMINI_API_KEY` when prompted (or set it in the backend service's
+   Environment settings later). Render generates `JWT_SECRET`.
+4. After deployment, copy the backend URL, for example
+   `https://learnhub-ai-backend.onrender.com`.
+5. Set the backend's `FRONTEND_URL` to the Vercel frontend origin after
+   deploying the frontend, then redeploy the backend.
 
-> Render **natively supports Node.js**. You do NOT need Docker.
+`backend-java/src/main/resources/schema.sql` creates the PostgreSQL tables on
+startup if they do not already exist. Render's `DB_HOST`, `DB_PORT`, `DB_NAME`,
+`DB_USER`, and `DB_PASSWORD` values are mapped to the managed database by
+`render.yaml`; do not add those credentials to GitHub.
 
-1. Push your code to **GitHub** (make sure `.env` is in `.gitignore` ✅)
-2. Go to [https://render.com](https://render.com) → New → **Web Service**
-3. Connect your GitHub repo
-4. Configure:
-   - **Name**: `learnhub-ai-backend`
-   - **Root Directory**: `backend`
-   - **Runtime**: `Node`
-   - **Build Command**: `npm install`
-   - **Start Command**: `node server.js`
-   - **Plan**: Free
-5. Under **Environment Variables**, add:
+## Deploy the frontend on Vercel
 
-   | Key | Value |
-   |-----|-------|
-   | `NODE_ENV` | `production` |
-   | `MONGO_URI` | *(your Atlas connection string from Step 1)* |
-   | `JWT_SECRET` | *(any long random string, e.g. 64 char hex)* |
-   | `GEMINI_API_KEY` | *(from https://aistudio.google.com/app/apikey)* |
-   | `FRONTEND_URL` | *(your Vercel URL — add after step 3, then redeploy)* |
+1. Import the GitHub repository as a Vercel project.
+2. Set the project **Root Directory** to `frontend` and use the Vite framework
+   preset. The build command is `npm run build`; the output directory is `dist`.
+3. Add the environment variable `VITE_API_URL` with the Render backend URL,
+   without a trailing slash, such as
+   `https://learnhub-ai-backend.onrender.com`.
+4. Deploy. Vercel uses `frontend/vercel.json` to route client-side app URLs
+   back to `index.html`.
+5. Copy the Vercel origin into Render's `FRONTEND_URL` and redeploy the backend
+   so CORS allows requests from the deployed frontend.
 
-6. Click **Deploy** → Wait ~3 minutes
-7. Copy your Render URL: `https://learnhub-ai-backend.onrender.com`
+## Local development
 
-> ⚠️ **Free Render services sleep after 15 min inactivity.** The first request after sleep takes ~30s. Consider [UptimeRobot](https://uptimerobot.com) (free) to ping your `/` health check every 5 min.
+Install Java 21, Maven, Node.js, and PostgreSQL. Create a local database named
+`learnhubai`, then set the variables listed in `backend-java/.env.example` in
+your shell environment. Spring Boot does not automatically load `.env` files.
+For PowerShell, for example:
 
----
+```sh
+$env:DB_HOST = "localhost"
+$env:DB_PORT = "5432"
+$env:DB_NAME = "learnhubai"
+$env:DB_USER = "postgres"
+$env:DB_PASSWORD = "your-local-postgres-password"
+$env:JWT_SECRET = "replace-this-with-at-least-32-random-characters"
+$env:FRONTEND_URL = "http://localhost:5173"
+Set-Location backend-java
+mvn spring-boot:run
+```
 
-## 🌐 STEP 3 — Deploy Frontend on Vercel
+The backend listens on `http://localhost:5000`. The frontend's
+`frontend/.env.example` points to that local API URL; copy it to
+`frontend/.env.local` if needed, then start the Vite development server:
 
-1. Go to [https://vercel.com](https://vercel.com) → New Project → Import GitHub repo
-2. Configure:
-   - **Root Directory**: `frontend`
-   - **Framework Preset**: `Vite`
-   - **Build Command**: `npm run build`
-   - **Output Directory**: `dist`
-3. Under **Environment Variables**, add:
+```sh
+cd frontend
+npm install
+npm run dev
+```
 
-   | Key | Value |
-   |-----|-------|
-   | `VITE_API_URL` | `https://learnhub-ai-backend.onrender.com` |
+The PostgreSQL schema is initialized automatically on backend startup. It
+creates the tables but does not populate sample course or quiz data.
 
-4. Click **Deploy** → Wait ~1 minute
-5. Copy your Vercel URL: `https://learnhub-ai.vercel.app`
+## Troubleshooting
 
----
-
-## 🔄 STEP 4 — Link Frontend ↔ Backend (CORS Fix)
-
-1. Go back to **Render** → Your backend service → **Environment**
-2. Update `FRONTEND_URL` = `https://learnhub-ai.vercel.app` *(your actual Vercel URL)*
-3. Click **Manual Deploy** → Deploy latest commit
-
----
-
-## ✅ Verify Everything Works
-
-- Visit your Vercel URL — homepage should load
-- Visit `https://your-backend.onrender.com/` — should return `{"status":"ok","message":"LearnHub AI API is running ✅"}`
-- Try registering an account → should store in MongoDB Atlas
-
----
-
-## 📋 Files Created for Deployment
-
-| File | Purpose |
-|------|---------|
-| `frontend/vercel.json` | Fixes React Router 404 on page refresh |
-| `frontend/.env.production` | Template for Vercel env vars |
-| `backend/.env.example` | Template for Render env vars |
-| `render.yaml` | Render infrastructure-as-code config |
-| `backend/.gitignore` | Keeps `.env` secrets out of GitHub |
-| `frontend/.gitignore` | Keeps `node_modules` and secrets out |
-
----
-
-## 🆘 Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| Login fails on production | Check `VITE_API_URL` in Vercel env vars points to Render URL |
-| CORS error in browser console | Add your Vercel URL to `FRONTEND_URL` in Render env vars |
-| Backend crashes on Render | Check `MONGO_URI` is correct and Atlas allows `0.0.0.0/0` |
-| Page 404 on refresh | `vercel.json` rewrite rule handles this ✅ |
-| Gemini AI returns mock data | Check `GEMINI_API_KEY` is set correctly in Render |
+| Problem | Check |
+| --- | --- |
+| Backend fails to start | Check the Render database environment variables and database status. |
+| Login fails in production | Confirm `VITE_API_URL` points to the deployed Render service. |
+| Browser reports a CORS error | Set Render `FRONTEND_URL` to the exact Vercel origin (no path) and redeploy. |
+| Frontend route returns 404 on refresh | Confirm `frontend/vercel.json` is included in the Vercel deployment. |
+| AI recommendations are unavailable | Set a valid `GEMINI_API_KEY` in the Render backend environment. |

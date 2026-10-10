@@ -1,23 +1,43 @@
+databases:
+  - name: learnhub-ai-postgres
+    databaseName: learnhubai
+    user: learnhubai
+    plan: free
+
 services:
   - type: web
     name: learnhub-ai-backend
-    runtime: node
+    runtime: docker
     region: oregon
     plan: free
-    rootDir: backend
-    buildCommand: npm install
-    startCommand: node server.js
+    rootDir: backend-java
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 5000
-      - key: MONGO_URI
-        sync: false   # Set manually in Render dashboard (MongoDB Atlas URI)
+      - key: DB_HOST
+        fromDatabase:
+          name: learnhub-ai-postgres
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: learnhub-ai-postgres
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: learnhub-ai-postgres
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: learnhub-ai-postgres
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: learnhub-ai-postgres
+          property: password
       - key: JWT_SECRET
-        generateValue: true  # Render auto-generates a secure random value
+        generateValue: true
       - key: GEMINI_API_KEY
-        sync: false   # Set manually in Render dashboard
+        sync: false
       - key: FRONTEND_URL
-        sync: false   # Set to your Vercel URL, e.g. https://learnhub-ai.vercel.app
+        sync: false
